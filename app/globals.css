@@ -1,26 +1,47 @@
-@import "tailwindcss";
+/* app/globals.css (Corrected - Removed global 'a' color) */
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Keep leaflet import commented out unless it's working */
+/* @import 'leaflet/dist/leaflet.css'; */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    /* Set default text color (e.g., text-base-text or text-gray-800) and background */
+    @apply bg-white text-gray-800 antialiased;
+    /* Ensure font-sans is applied if needed, though layout should handle it */
+    @apply font-sans;
+  }
+  /* Base heading styles */
+  h1, h2, h3, h4, h5, h6 {
+     @apply font-semibold text-slate-900;
+  }
+
+  /* REMOVED the 'a { @apply text-link-color ... }' rule */
+
+  /* You could add non-color base link styles here if desired */
+  /* a { @apply transition-colors duration-200; } */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Keep cursor effect styles if you added them back */
+.cursor-emoji {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  font-size: 1.5rem;
+  animation: float-up-fade-out 0.7s ease-out forwards;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes float-up-fade-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.8);
   }
 }
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+/* End cursor effect styles */
