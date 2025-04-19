@@ -1,8 +1,9 @@
 // app/update-password/page.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import React, { useState, useEffect, useRef } from 'react';
+// Removed useSearchParams import
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import Link from 'next/link';
@@ -15,7 +16,7 @@ type Inputs = {
 export default function UpdatePasswordPage() {
     const supabase = createClient();
     const router = useRouter();
-    const searchParams = useSearchParams();
+    // REMOVED: const searchParams = useSearchParams();
     const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isAuthenticatedForReset, setIsAuthenticatedForReset] = useState(false);
@@ -24,31 +25,23 @@ export default function UpdatePasswordPage() {
     const newPassword = watch('password');
 
     // Check if the user landed here from a valid reset link
-    // Supabase typically sets a session after email link clicked,
-    // or handles recovery via onAuthStateChange event TYPE 'PASSWORD_RECOVERY'
     useEffect(() => {
-        // Listen for the PASSWORD_RECOVERY event which indicates readiness to update
         const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
             if (event === "PASSWORD_RECOVERY") {
                 console.log("Password recovery event detected, ready to update.");
                 setIsAuthenticatedForReset(true);
-            } else if (!session) {
-                 // If session becomes null unexpectedly, maybe redirect
-                 // console.log("Session lost during password update process.");
             }
         });
 
-         // Check initial state too - sometimes session exists immediately after link click
+         // Check initial state too
          supabase.auth.getSession().then(({ data: { session }}) => {
-             // A valid session after clicking link indicates readiness.
-             // Note: Supabase might not always expose the 'PASSWORD_RECOVERY' state explicitly here,
-             // relying on the presence of *any* session triggered by the recovery link.
              if (session) {
+                 // If a session exists immediately, assume it's from the recovery link
+                 // NOTE: Supabase might improve the explicitness of this state later
                  console.log("Session found on page load, assuming recovery state.");
                  setIsAuthenticatedForReset(true);
-             } else {
-                // If no session, the link might be invalid or expired
-                setMessage({ text: 'Invalid or expired password reset link.', type: 'error' });
+             } else if (!isAuthenticatedForReset) { // Only show error if recovery event didn't fire yet
+                setMessage({ text: 'Waiting for recovery session or link may be invalid/expired.', type: 'error' });
              }
          });
 
@@ -56,22 +49,24 @@ export default function UpdatePasswordPage() {
         return () => {
             authListener?.subscription.unsubscribe();
         };
+    // Rerun only once on mount for this check
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [supabase]);
 
     const onSubmit: SubmitHandler<Inputs> = async (data) => {
         if (!isAuthenticatedForReset) {
-            setMessage({ text: 'Cannot update password. Invalid state.', type: 'error' });
+            setMessage({ text: 'Cannot update password. Invalid state or expired link.', type: 'error' });
             return;
         }
         if (data.password !== data.confirmPassword) {
-            setMessage({ text: 'Passwords do not match.', type: 'error' });
-            return;
+            // This validation is also handled by react-hook-form now
+            // setMessage({ text: 'Passwords do not match.', type: 'error' });
+            return; // react-hook-form prevents submission if validation fails
         }
 
         setIsLoading(true);
         setMessage(null);
 
-        // Update user password
         const { error } = await supabase.auth.updateUser({
             password: data.password,
         });
@@ -81,10 +76,9 @@ export default function UpdatePasswordPage() {
             setMessage({ text: `Error updating password: ${error.message}`, type: 'error' });
         } else {
             console.log("Password updated successfully");
-            setMessage({ text: 'Password updated successfully! You can now log in.', type: 'success' });
-            reset(); // Clear form
-            // Optionally redirect after a delay
-            setTimeout(() => router.push('/login'), 3000);
+            setMessage({ text: 'Password updated successfully! Redirecting to login...', type: 'success' });
+            reset();
+            setTimeout(() => router.push('/login'), 3000); // Redirect after 3s
         }
         setIsLoading(false);
     };
@@ -99,13 +93,8 @@ export default function UpdatePasswordPage() {
                     </h2>
                 </div>
 
-                {/* Display message if not authenticated via link */}
-                {!isAuthenticatedForReset && message && message.type === 'error' && (
-                    <p className="text-center text-sm text-red-600">{message.text}</p>
-                )}
-
-                {/* Only show form if authenticated for reset */}
-                {isAuthenticatedForReset && (
+                {/* Show form only when ready */}
+                {isAuthenticatedForReset ? (
                     <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
                         <input type="hidden" name="remember" defaultValue="true" />
                         <div className="rounded-md shadow-sm -space-y-px">
@@ -138,32 +127,28 @@ export default function UpdatePasswordPage() {
                         {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
                         {errors.confirmPassword && <p className="text-xs text-red-600">{errors.confirmPassword.message}</p>}
 
-                        {message && (
-                            <p className={`text-sm ${message.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-                                {message.text}
-                            </p>
-                        )}
+                        {/* Display message from submission state */}
+                        {message && ( <p className={`mt-2 text-sm ${message.type === 'success' ? 'text-green-600' : 'text-red-600'}`}> {message.text} </p> )}
 
-                         {/* Show success message & login link */}
+                        {/* Hide button on success, show login link */}
                         {message?.type === 'success' ? (
-                             <div className="text-center">
-                                <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
-                                    Go to Login
-                                </Link>
-                            </div>
+                             <div className="text-center mt-4"> <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500"> Go to Login </Link> </div>
                         ) : (
                             <div>
-                                <button
-                                    type="submit"
-                                    disabled={isLoading}
-                                    className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-                                >
+                                <button type="submit" disabled={isLoading} className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50">
                                     {isLoading ? 'Setting Password...' : 'Set New Password'}
                                 </button>
                             </div>
                         )}
                     </form>
-                 )} {/* End of conditional form rendering */}
+                 ) : (
+                    // Show loading or invalid link message
+                     <div className="text-center mt-8">
+                         <p className={`text-sm ${message?.type === 'error' ? 'text-red-600' : 'text-gray-600'}`}>
+                           {message?.text || 'Verifying reset link...'}
+                         </p>
+                     </div>
+                 )}
             </div>
         </div>
     );
